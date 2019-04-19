@@ -33,6 +33,13 @@
     (setf *shot-pos* (add *shot-pos* (mult (- new-time *last-time*) *shot-vel*)))
     (setf *last-time* new-time)))
 
+(defmacro add-bindings ((key state &body body) &rest more-bindings)
+  "Setup bindings without as much boiler plate."
+  `(progn (bind-button ,key ,state (lambda () ,@body))
+          ,@(if more-bindings
+                `((add-bindings ,@more-bindings))
+                nil)))
+
 (defmethod post-initialize ((this split-shot))
   ;; Initialize world state
   (setf *last-time* (real-time-seconds))
@@ -40,12 +47,11 @@
   (setf *shot-vel* (vec2 0 0))
 
   ;; Setup bindings
-  (bind-button :q :pressed
-               (lambda ()
-                 (gamekit:stop)))
-  (bind-button :space :pressed
-               (lambda ()
-                 (setf *shot-vel* (vec2 0 *initial-vel*)))))
+  (add-bindings
+      (:q :pressed
+        (stop))
+      (:space :pressed
+              (setf *shot-vel* (vec2 0 *initial-vel*)))))
 
 (defmethod draw ((this split-shot))
   (draw-rect (add *shot-pos* *origin*)
