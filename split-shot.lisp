@@ -40,6 +40,10 @@
                 `((add-bindings ,@more-bindings))
                 nil)))
 
+(defun perp-vec (vec)
+  "Create a perpendicular vector by rotating 90 degrees clockwise."
+  (vec2 (y vec) (- (x vec))))
+
 (defmethod post-initialize ((this split-shot))
   ;; Initialize world state
   (setf *last-time* (real-time-seconds))
@@ -48,8 +52,14 @@
 
   ;; Setup bindings
   (add-bindings
-      (:q :pressed
+      (:escape :pressed
         (stop))
+      (:q :pressed
+          (let ((perp (normalize (perp-vec *shot-vel*))))
+            (setf *shot-vel* (add (mult 1 perp) *shot-vel*))))
+      (:p :pressed
+          (let ((perp (normalize (perp-vec *shot-vel*))))
+            (setf *shot-vel* (add (mult -1 perp) *shot-vel*))))
       (:space :pressed
               (setf *shot-vel* (vec2 0 *initial-vel*)))))
 
