@@ -1,0 +1,36 @@
+
+- 2019-04-18 23:00
+
+  I decided to take part in the 2019 Lisp Game Jam.  Looked at the site and saw
+  that there is this game engine called Trivial-Gamekit.  Decided to base it on
+  that.  I want to actually finish this, so I'll try to keep the plan
+  achievable.
+
+- 2019-04-19 23:30
+
+  After getting Trivial-Gamekit setup, I remembered that I had an old idea of a
+  game mechanic for a puzzle game called split-shot.  I never really started on
+  it, but it seems like the core mechanic could be prototyped during the jam.
+
+- 2019-04-19 07:00
+
+  Started playing with the Gamekit tutorials.  Have a window there but having
+  issues with getting input.
+
+- 2019-04-19 13:38
+
+  Started this log.
+
+  Been futzing with Emacs stuff for about an hour.  I don't get to hack at home
+  very much and thus it seems that many of the packages I use have deprecated
+  the behavior that I have been counting on.
+
+  Most annoying is that GGTags has this stupid behavior where it enables itself
+  everywhere which screws up the navigation used in Lisp.  I remember that it
+  also screws up the navigation used in Eclim, back when I used that.  I enabled
+  it for hacking on C/C++ as it is pretty useful there, I think, but it screws
+  too much stuff up, so I uninstalled it.
+
+  Magit, as much as I love it, has a developer which is never afraid to break
+  things.  Things were broken due to some hook that got added to my Magit config
+  long ago.  I needed to remove the hook and it is working again.  Whew...
