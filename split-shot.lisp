@@ -28,6 +28,8 @@
 
 (defvar *shot-vel* (vec2 0 30))
 
+(defvar *shot-state* (make-array 10 :initial-element 100))
+
 (defun real-time-seconds ()
   "Return seconds since certain point of time"
   (float (/ (get-internal-real-time) internal-time-units-per-second) 0d0))
@@ -40,20 +42,25 @@
   (vec2 (y vec) (- (x vec))))
 
 (defmethod act ((app split-shot))
-  (let ((new-time (real-time-seconds)))
+  (let* ((new-time (real-time-seconds))
+         (dt (- new-time *last-time*)))
 
-    (when *turn-right*
+    (when (and (> (aref *shot-state* 0) 0d0) *turn-right*)
       (let ((perp (normalize (perp-vec *shot-vel*))))
-        (setf *shot-vel* (add (mult 1 perp) *shot-vel*))))
+        (setf *shot-vel* (add (mult (* 30 dt) perp) *shot-vel*))
+        (setf (aref *shot-state* 0) (max 0d0 (- (aref *shot-state* 0) (* 30 dt))))))
 
-    (when *turn-left*
+    (when (and (> (aref *shot-state* 9) 0d0) *turn-left*)
       (let ((perp (normalize (perp-vec *shot-vel*))))
-        (setf *shot-vel* (add (mult -1 perp) *shot-vel*))))
+        (setf *shot-vel* (add (mult (* -30 dt) perp) *shot-vel*))
+        (setf (aref *shot-state* 9) (max 0d0 (- (aref *shot-state* 9) (* 30 dt))))))
 
     (when *cannon-turn-left* (incf *cannon-rotation* 0.1))
     (when *cannon-turn-right* (decf *cannon-rotation* 0.1))
 
-    (setf *shot-pos* (add *shot-pos* (mult (- new-time *last-time*) *shot-vel*)))
+    ;; Integrate motion
+    (setf *shot-pos* (add *shot-pos* (mult dt *shot-vel*)))
+
     (setf *last-time* new-time)))
 
 (defmacro add-bindings ((keys state &body body) &rest more-bindings)
@@ -104,6 +111,8 @@
 (defmethod post-initialize ((this split-shot))
   ;; Initialize world state
   (setf *last-time* (real-time-seconds))
+
+  (setf *shot-state* (make-array 10 :initial-element 100))
 
   (setf *shot-pos* *cannon-pos*)
   (setf *shot-vel* (vec2 0 0))
