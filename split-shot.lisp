@@ -1,12 +1,17 @@
 
 (in-package :split-shot)
 
-(defgame split-shot () ())
-
 (defvar *width* 800)
 (defvar *height* 600)
 
+(defgame split-shot ()
+  ()
+  (:viewport-width *width*)
+  (:viewport-height *height*)
+  (:viewport-title "SplitShot"))
+
 (defvar *black* (vec4 0 0 0 1))
+(defvar *white* (vec4 1 1 1 1))
 (defvar *origin* (vec2 0 0))
 
 (defvar *cannon-pos* (vec2 (floor *width* 2) 0))
@@ -106,6 +111,14 @@
       (:space :pressed
               (setf *shot-vel* (vec2 0 *initial-vel*)))))
 
+(defun draw-shot ()
+  (draw-rect *origin*
+             10 5 :fill-paint *white* :rounding 5.0))
+
 (defmethod draw ((this split-shot))
-  (draw-rect (add *shot-pos* *origin*)
-             10 10 :fill-paint *black* :rounding 5.0))
+  (draw-rect *origin*
+             *width* *height* :fill-paint *black*)
+  (bodge-canvas:with-retained-canvas
+    (translate-canvas (x *shot-pos*) (y *shot-pos*))
+    (rotate-canvas (atan (y *shot-vel*) (x *shot-vel*)))
+    (draw-shot)))
