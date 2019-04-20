@@ -1,7 +1,3 @@
-;; (ql:quickload '(:iterate :trivial-gamekit))
-
-(defpackage :split-shot
-  (:use :cl :iterate :gamekit))
 
 (in-package :split-shot)
 
@@ -45,11 +41,6 @@
              (setf *shot-vel* (add (mult -1 perp) *shot-vel*)))))
     (setf *shot-pos* (add *shot-pos* (mult (- new-time *last-time*) *shot-vel*)))
     (setf *last-time* new-time)))
-
-(defun ensure-list (x)
-  (if (consp x)
-      x
-      (list x)))
 
 (defmacro add-bindings ((keys state &body body) &rest more-bindings)
   "Setup bindings without as much boiler plate."
