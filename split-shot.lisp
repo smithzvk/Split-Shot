@@ -114,14 +114,50 @@
     (:o 8)
     (:p 9)))
 
-(defun handle-split (key-index)
-  (cond ((= key-index 0)
-         (setf *turn-right* t))
-        ((= key-index 9)
-         (setf *turn-left* t))
-        (t
-         ;; pass
-         )))
+(defun find-shot (key)
+  "Determine which shot the given key applies to."
+  (let ((shots (cons nil *shots*))
+        (in-shot nil)
+        (interior nil))
+    (values
+     (iter (for val :in-vector *shot-state* :with-index i)
+       (cond ((and (not in-shot) (> val 0))
+              (setf in-shot t)
+              (pop shots))
+             (in-shot
+              (cond ((= val 0)
+                     (setf in-shot nil
+                           interior nil))
+                    ((and (< (+ i 1) (length *shot-state*))
+                          (> (aref *shot-state* (+ i 1)) 0))
+                     (setf interior t))
+                    (t
+                     (setf interior nil)))))
+       (when (> i key) (finish))
+       (finding (first shots) :such-that (= i key)))
+     interior)))
+
+(defun handle-split (shot i)
+  (let ((pos (position shot *shots* :test 'eq))
+        (perp (normalize (perp-vec (shot-vel shot))))
+        (left-shot (make-shot :pos (shot-pos shot)
+                              :index (shot-index shot)))
+        (right-shot (make-shot :pos (shot-pos shot)
+                               :index (+ i 1))))
+    ;; First split the shot
+    (setf (aref *shot-state* i) 0)
+
+    ;; Update the velocity given the new shots
+    (setf (shot-vel left-shot)
+          (add (mult (/ -4000 (shot-mass left-shot)) perp) (shot-vel shot)))
+    (setf (shot-vel right-shot)
+          (add (mult (/ 4000 (shot-mass right-shot)) perp) (shot-vel shot)))
+    (setf *shots* (concatenate
+                   'list
+                   (subseq *shots* 0 pos)
+                   (list left-shot right-shot)
+                   (subseq *shots* (+ pos 1))))
+    (print (list *shot-state* *shots*))))
 
 (defmethod post-initialize ((this split-shot))
   ;; Initialize world state
@@ -142,7 +178,11 @@
       (:escape :pressed
         (stop))
       ((:q :w :e :r :t :y :u :i :o :p) :pressed
-       (setf (aref *key-pressed* (key-index key)) t))
+       (multiple-value-bind (shot interior) (find-shot (key-index key))
+         (if (and shot interior)
+             ;; If the key is in the interior of a shot, then perform a split
+             (handle-split shot (key-index key))
+             (setf (aref *key-pressed* (key-index key)) t))))
       ((:q :w :e :r :t :y :u :i :o :p) :released
        (setf (aref *key-pressed* (key-index key)) nil))
 
