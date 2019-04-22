@@ -35,6 +35,7 @@
   "Holds the current pressed state of the shot controlling keys.")
 
 (defstruct shot pos vel index)
+(defparameter *fast-forward* 1.0)
 
 (defun shot-mass (shot)
   (iter (for i :from (shot-index shot) :below (length *shot-state*))
@@ -126,7 +127,8 @@ not rounded and the margin doesn't apply to distances past the end of the line."
 
 (defmethod act ((app split-shot))
   (let* ((new-time (real-time-seconds))
-         (dt (- new-time *last-time*))
+         (dt (* (- new-time *last-time*)
+                *fast-forward*))
          (removal-list ()))
 
     (when *cannon-turn-left* (incf *cannon-rotation* 0.1))
@@ -274,6 +276,7 @@ not rounded and the margin doesn't apply to distances past the end of the line."
 (defmethod post-initialize ((this split-shot))
   ;; Initialize world state
   (setf *last-time* (real-time-seconds))
+  (setf *level-number* 0)
 
   (init-level (nth *level-number* *levels*))
 
@@ -295,6 +298,10 @@ not rounded and the margin doesn't apply to distances past the end of the line."
       (:d :pressed (setf *cannon-turn-right* t))
       (:d :released (setf *cannon-turn-right* nil))
 
+      (:up :pressed (setf *fast-forward* (* *fast-forward* 2)))
+      (:up :released (setf *fast-forward* (/ *fast-forward* 2)))
+      (:down :pressed (setf *fast-forward* (/ *fast-forward* 2)))
+      (:down :released (setf *fast-forward* (* *fast-forward* 2)))
       (:space :pressed
               ;; Like a reset, for now
               (setf *shots*
