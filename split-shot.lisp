@@ -12,6 +12,9 @@
 
 (defvar *black* (vec4 0 0 0 1))
 (defvar *white* (vec4 1 1 1 1))
+(defvar *red* (vec4 1 0 0 1))
+(defvar *green* (vec4 0 1 0 1))
+
 (defvar *origin* (vec2 0 0))
 
 (defvar *cannon-pos* (vec2 (floor *width* 2) 0))
@@ -46,8 +49,68 @@
 
 (defstruct target pos)
 
-(defvar *targets* ()
+(defvar *live-targets* ()
   "A list of targets that need to be hit to win the level.")
+(defvar *hit-targets* ()
+  "A list of targets that have already been hit.")
+
+(defun dot-product (va vb)
+  (rtg-math.vector2:dot
+   (bodge-math::value-of va)
+   (bodge-math::value-of vb)))
+
+(defun distance-squared (va vb)
+  (rtg-math.vector2:distance-squared
+   (bodge-math::value-of va)
+   (bodge-math::value-of vb)))
+
+(defun length-squared (v)
+  (rtg-math.vector2:length (bodge-math::value-of v)))
+
+(defun perp-vec (vec)
+  "Create a perpendicular vector by rotating 90 degrees clockwise."
+  (vec2 (y vec) (- (x vec))))
+
+(defun line-collision (pos line margin)
+  "Test if point, POS, is within collision distance, MARGIN, of LINE specified
+as a list containing a starting point, a unit direction vector, and a length.
+This is a polling collision detector, so MARGIN should be chosen such that it is
+larger you ever expect to step in a given frame time step.
+
+If there is an collision, return the perpendicular distance to the line.
+Positive is to the right of the line as you stand at its starting point and look
+down its direction.
+
+Note that this isn't a sphero-cylinder style collision test.  Ends of lines are
+not rounded and the margin doesn't apply to distances past the end of the line."
+  (destructuring-bind (start direction length) line
+    (let* ((diff (gamekit:subt pos start))
+           (a (dot-product diff direction)))
+      (when (<= 0 a length)
+        (let* ((perp (perp-vec direction))
+               (p (dot-product diff perp)))
+          (when (<= (- margin) p margin)
+            p))))))
+
+(defun target-collision (pos target rad)
+  (< (distance-squared pos target)
+     (* rad rad)))
+
+(defparameter *boundary*
+  (list (list (vec2 0 0)              (vec2  0 +1) *height*)
+        (list (vec2 0 *height*)       (vec2 +1  0) *width*)
+        (list (vec2 *width* *height*) (vec2  0 -1) *height*)
+        (list (vec2 *width* 0)        (vec2 -1  0) *width*)))
+
+(defparameter *levels*
+  (list
+   (list
+    :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
+    :targets (list (vec2 (/ *width* 2) *height*))
+    :walls ())))
+
+(defvar *level* nil
+  "The current level.")
 
 (defun real-time-seconds ()
   "Return seconds since certain point of time."
@@ -56,13 +119,10 @@
 (defvar *last-time* (real-time-seconds)
   "Denotes timestamp of the last model frame.")
 
-(defun perp-vec (vec)
-  "Create a perpendicular vector by rotating 90 degrees clockwise."
-  (vec2 (y vec) (- (x vec))))
-
 (defmethod act ((app split-shot))
   (let* ((new-time (real-time-seconds))
-         (dt (- new-time *last-time*)))
+         (dt (- new-time *last-time*))
+         (removal-list ()))
 
     (when *cannon-turn-left* (incf *cannon-rotation* 0.1))
     (when *cannon-turn-right* (decf *cannon-rotation* 0.1))
@@ -83,7 +143,35 @@
           (setf (aref *shot-state* 9) (max 0d0 (- (aref *shot-state* 9) (* 30 dt))))))
 
       ;; Integrate motion
-      (setf (shot-pos shot) (add (shot-pos shot) (mult dt (shot-vel shot)))))
+      (setf (shot-pos shot) (add (shot-pos shot) (mult dt (shot-vel shot))))
+
+      ;; Detect collisions
+      (when (or
+             ;; Detect out of bounds
+             (iter (for wall :in *boundary*)
+               (for collision := (line-collision (shot-pos shot) wall 500))
+               (finding wall :such-that (and collision (< collision 0))))
+             ;; Detect collisions with walls
+             (iter (for wall :in (getf *level* :walls))
+               (for collision := (line-collision (shot-pos shot) wall 5))
+               (finding wall :such-that collision)))
+        (push shot removal-list)))
+
+    (iter (for shot :in removal-list)
+      (setf *shots* (remove shot *shots*))
+
+      (iter (for i :from (shot-index shot) :below (length *shot-state*))
+        (if (= 0 (aref *shot-state* i))
+            (finish)
+            (setf (aref *shot-state* i) 0)))
+
+      (let ((hit-targets ()))
+        (iter (for target :in *live-targets*)
+          (when (target-collision (shot-pos shot) target 10)
+            (push target hit-targets)))
+        (iter (for target :in hit-targets)
+          (push target *hit-targets*)
+          (setf *live-targets* (remove target *live-targets*)))))
 
     (setf *last-time* new-time)))
 
@@ -156,8 +244,7 @@
                    'list
                    (subseq *shots* 0 pos)
                    (list left-shot right-shot)
-                   (subseq *shots* (+ pos 1))))
-    (print (list *shot-state* *shots*))))
+                   (subseq *shots* (+ pos 1))))))
 
 (defmethod post-initialize ((this split-shot))
   ;; Initialize world state
@@ -169,9 +256,15 @@
   (setf *turn-right* nil)
   (setf *turn-left* nil)
 
-  (setf *cannon-rotation* 0.0)
-  (setf *cannon-turn-right* nil)
-  (setf *cannon-turn-left* nil)
+  (setf *level* (first *levels*))
+  (setf *live-targets* (getf *level* :targets))
+  (setf *hit-targets* ())
+
+  (destructuring-bind (pos min max) (getf *level* :cannon)
+    (setf *cannon-pos* pos)
+    (setf *cannon-rotation* 0.0)
+    (setf *cannon-turn-right* nil)
+    (setf *cannon-turn-left* nil))
 
   ;; Setup bindings
   (add-bindings
@@ -201,6 +294,12 @@
                                                    (cos *cannon-rotation*)))
                                      :index 0))))))
 
+(defun draw-wall (direction length)
+  (draw-line *origin* (mult length direction) *white* :thickness 5.0))
+
+(defun draw-target (color)
+  (draw-circle *origin* 15 :fill-paint color))
+
 (defun draw-shot ()
   (let ((w 10) (h 5))
     (draw-rect (vec2 (/ w -2) (/ h -2))
@@ -226,4 +325,17 @@
   (with-pushed-canvas ()
     (translate-canvas (x *cannon-pos*) (y *cannon-pos*))
     (rotate-canvas *cannon-rotation*)
-    (draw-cannon)))
+    (draw-cannon))
+  (iter (for target :in *live-targets*)
+    (with-pushed-canvas ()
+      (translate-canvas (x target) (y target))
+      (draw-target *red*)))
+  (iter (for target :in *hit-targets*)
+    (with-pushed-canvas ()
+      (translate-canvas (x target) (y target))
+      (draw-target *green*)))
+  (iter (for (start direction length)
+             :in (append *boundary* (getf *level* :walls)))
+    (with-pushed-canvas ()
+      (translate-canvas (x start) (y start))
+      (draw-wall direction length))))
