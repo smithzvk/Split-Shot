@@ -24,9 +24,6 @@
 
 (defvar *shot-pos* *cannon-pos*)
 
-(defvar *turn-right* nil)
-(defvar *turn-left* nil)
-
 (defvar *initial-vel* 50)
 
 (defvar *shot-vel* (vec2 0 30))
@@ -107,10 +104,18 @@ not rounded and the margin doesn't apply to distances past the end of the line."
    (list
     :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
     :targets (list (vec2 (/ *width* 2) *height*))
+    :walls ())
+   (list
+    :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
+    :targets (list (vec2 (/ (* 1 *width*) 3) *height*)
+                   (vec2 (/ (* 2 *width*) 3) *height*))
     :walls ())))
 
 (defvar *level* nil
-  "The current level.")
+  "The current level")
+
+(defvar *level-number* 0
+  "The current level number")
 
 (defun real-time-seconds ()
   "Return seconds since certain point of time."
@@ -172,6 +177,11 @@ not rounded and the margin doesn't apply to distances past the end of the line."
         (iter (for target :in hit-targets)
           (push target *hit-targets*)
           (setf *live-targets* (remove target *live-targets*)))))
+
+    (unless *live-targets*
+      (format t "~%Level Complete!")
+      (incf *level-number*)
+      (init-level (nth *level-number* *levels*)))
 
     (setf *last-time* new-time)))
 
@@ -246,17 +256,12 @@ not rounded and the margin doesn't apply to distances past the end of the line."
                    (list left-shot right-shot)
                    (subseq *shots* (+ pos 1))))))
 
-(defmethod post-initialize ((this split-shot))
-  ;; Initialize world state
-  (setf *last-time* (real-time-seconds))
+(defun init-level (level)
+  (setf *level* level)
 
   (setf *shot-state* (make-array 10 :initial-element 100))
   (setf *shots* nil)
 
-  (setf *turn-right* nil)
-  (setf *turn-left* nil)
-
-  (setf *level* (first *levels*))
   (setf *live-targets* (getf *level* :targets))
   (setf *hit-targets* ())
 
@@ -264,7 +269,13 @@ not rounded and the margin doesn't apply to distances past the end of the line."
     (setf *cannon-pos* pos)
     (setf *cannon-rotation* 0.0)
     (setf *cannon-turn-right* nil)
-    (setf *cannon-turn-left* nil))
+    (setf *cannon-turn-left* nil)))
+
+(defmethod post-initialize ((this split-shot))
+  ;; Initialize world state
+  (setf *last-time* (real-time-seconds))
+
+  (init-level (nth *level-number* *levels*))
 
   ;; Setup bindings
   (add-bindings
