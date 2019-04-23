@@ -27,20 +27,33 @@
 (defvar *initial-vel* 50)
 
 (defvar *shot-vel* (vec2 0 30))
+(defvar *shot-fired* nil)
 
-(defvar *shot-state* (make-array 10 :initial-element 100)
+(defvar *shot-state* (make-array 23 :initial-element 100)
   "This holds the global state of all of your shots.")
 
-(defvar *key-pressed* (make-array 10 :initial-element nil)
+(defvar *key-pressed* (make-array 23 :initial-element nil)
   "Holds the current pressed state of the shot controlling keys.")
 
-(defstruct shot pos vel index)
 (defparameter *fast-forward* 1.0)
 
+(defstruct shot pos vel ilo ihi)
+
 (defun shot-mass (shot)
-  (iter (for i :from (shot-index shot) :below (length *shot-state*))
+  (iter (for i :from (shot-ilo shot) :below (length *shot-state*))
     (while (> (aref *shot-state* i) 0))
     (summing (aref *shot-state* i))))
+
+(defun find-shot (index)
+  (let ((shot (iter (for shot :in *shots*)
+                (finding shot :such-that (<= (shot-ilo shot)
+                                             index
+                                             (shot-ihi shot))))))
+    (if shot
+        (values shot (< (shot-ilo shot)
+                        index
+                        (shot-ihi shot)))
+        nil)))
 
 (defvar *shots* ()
   "A list of current shots.")
@@ -134,20 +147,35 @@ not rounded and the margin doesn't apply to distances past the end of the line."
     (when *cannon-turn-left* (incf *cannon-rotation* 0.1))
     (when *cannon-turn-right* (decf *cannon-rotation* 0.1))
 
+    ;; Steering of shots
+    (iter (for key :in-vector *key-pressed* :with-index i)
+      (when key
+        (multiple-value-bind (shot interior) (find-shot i)
+          (when (and shot (not interior))
+            (let ((perp (normalize (perp-vec (shot-vel shot)))))
+              (cond ((= i (shot-ilo shot))
+                     (setf (shot-vel shot)
+                           (add (mult (* 30 dt) perp)
+                                (shot-vel shot)))
+                     (setf (aref *shot-state* (shot-ilo shot))
+                           (max 0 (- (aref *shot-state* (shot-ilo shot))
+                                     (* 30 dt)))))
+                    ((= i (shot-ihi shot))
+                     (setf (shot-vel shot)
+                           (add (mult (* -30 dt) perp)
+                                (shot-vel shot)))
+                     (setf (aref *shot-state* (shot-ihi shot))
+                           (max 0 (- (aref *shot-state* (shot-ihi shot))
+                                     (* 30 dt)))))))
+            (when (= 0 (aref *shot-state* (shot-ilo shot)))
+              (incf (shot-ilo shot)))
+            (when (= 0 (aref *shot-state* (shot-ihi shot)))
+              (decf (shot-ihi shot)))
+            (when (< (shot-ihi shot) (shot-ilo shot))
+              (push shot removal-list))))))
+
     ;; Handle shot motion
     (iter (for shot :in *shots*)
-      (when (and (aref *key-pressed* 0)
-                 (> (aref *shot-state* 0) 0d0))
-        (let ((perp (normalize (perp-vec (shot-vel shot)))))
-          (setf (shot-vel shot) (add (mult (* 30 dt) perp)
-                                     (shot-vel shot)))
-          (setf (aref *shot-state* 0) (max 0d0 (- (aref *shot-state* 0) (* 30 dt))))))
-
-      (when (and (aref *key-pressed* 9)
-                 (> (aref *shot-state* 9) 0d0))
-        (let ((perp (normalize (perp-vec (shot-vel shot)))))
-          (setf (shot-vel shot) (add (mult (* -30 dt) perp) (shot-vel shot)))
-          (setf (aref *shot-state* 9) (max 0d0 (- (aref *shot-state* 9) (* 30 dt))))))
 
       ;; Integrate motion
       (setf (shot-pos shot) (add (shot-pos shot) (mult dt (shot-vel shot))))
@@ -167,7 +195,7 @@ not rounded and the margin doesn't apply to distances past the end of the line."
     (iter (for shot :in removal-list)
       (setf *shots* (remove shot *shots*))
 
-      (iter (for i :from (shot-index shot) :below (length *shot-state*))
+      (iter (for i :from (shot-ilo shot) :below (length *shot-state*))
         (if (= 0 (aref *shot-state* i))
             (finish)
             (setf (aref *shot-state* i) 0)))
@@ -180,10 +208,16 @@ not rounded and the margin doesn't apply to distances past the end of the line."
           (push target *hit-targets*)
           (setf *live-targets* (remove target *live-targets*)))))
 
-    (unless *live-targets*
-      (format t "~%Level Complete!")
-      (incf *level-number*)
-      (init-level (nth *level-number* *levels*)))
+    (unless (iter (for val :in-vector *shot-state*)
+              (thereis (> val 0)))
+      (cond (*live-targets*
+             (format t "~%Try again!")
+             (init-level (nth (mod *level-number* (length *levels*))
+                              *levels*)))
+            (t (format t "~%Level Complete!")
+               (incf *level-number*)
+               (init-level (nth (mod *level-number* (length *levels*))
+                                *levels*)))))
 
     (setf *last-time* new-time)))
 
@@ -204,46 +238,38 @@ not rounded and the margin doesn't apply to distances past the end of the line."
 (defun key-index (key)
   (case key
     (:q 0)
-    (:w 1)
-    (:e 2)
-    (:r 3)
-    (:t 4)
-    (:y 5)
-    (:u 6)
-    (:i 7)
-    (:o 8)
-    (:p 9)))
-
-(defun find-shot (key)
-  "Determine which shot the given key applies to."
-  (let ((shots (cons nil *shots*))
-        (in-shot nil)
-        (interior nil))
-    (values
-     (iter (for val :in-vector *shot-state* :with-index i)
-       (cond ((and (not in-shot) (> val 0))
-              (setf in-shot t)
-              (pop shots))
-             (in-shot
-              (cond ((= val 0)
-                     (setf in-shot nil
-                           interior nil))
-                    ((and (< (+ i 1) (length *shot-state*))
-                          (> (aref *shot-state* (+ i 1)) 0))
-                     (setf interior t))
-                    (t
-                     (setf interior nil)))))
-       (when (> i key) (finish))
-       (finding (first shots) :such-that (= i key)))
-     interior)))
+    (:a 1)
+    (:w 2)
+    (:s 3)
+    (:e 4)
+    (:d 5)
+    (:r 6)
+    (:f 7)
+    (:t 8)
+    (:g 9)
+    (:y 10)
+    (:h 11)
+    (:u 12)
+    (:j 13)
+    (:i 14)
+    (:k 15)
+    (:o 16)
+    (:l 17)
+    (:p 18)
+    (:semicolon 19)
+    (:left-bracket 20)
+    (:apostrophe 21)
+    (:right-bracket 22)))
 
 (defun handle-split (shot i)
   (let ((pos (position shot *shots* :test 'eq))
         (perp (normalize (perp-vec (shot-vel shot))))
         (left-shot (make-shot :pos (shot-pos shot)
-                              :index (shot-index shot)))
+                              :ilo (shot-ilo shot)
+                              :ihi (- i 1)))
         (right-shot (make-shot :pos (shot-pos shot)
-                               :index (+ i 1))))
+                               :ilo (+ i 1)
+                               :ihi (shot-ihi shot))))
     ;; First split the shot
     (setf (aref *shot-state* i) 0)
 
@@ -259,10 +285,17 @@ not rounded and the margin doesn't apply to distances past the end of the line."
                    (subseq *shots* (+ pos 1))))))
 
 (defun init-level (level)
+  (unless level (stop))
+
   (setf *level* level)
 
-  (setf *shot-state* (make-array 10 :initial-element 100))
+  (setf *key-pressed* (make-array (length *key-pressed*)
+                                  :initial-element nil))
+
+  (setf *shot-state* (make-array (length *shot-state*)
+                                 :initial-element 100))
   (setf *shots* nil)
+  (setf *shot-fired* nil)
 
   (setf *live-targets* (getf *level* :targets))
   (setf *hit-targets* ())
@@ -278,39 +311,46 @@ not rounded and the margin doesn't apply to distances past the end of the line."
   (setf *last-time* (real-time-seconds))
   (setf *level-number* 0)
 
-  (init-level (nth *level-number* *levels*))
+  (init-level (nth (mod *level-number* (length *levels*)) *levels*))
 
   ;; Setup bindings
   (add-bindings
       (:escape :pressed
         (stop))
-      ((:q :w :e :r :t :y :u :i :o :p) :pressed
+      ((:q :a :w :s :e :d :r :f :t :g :y :h :u :j :i :k :o :l :p
+           :semicolon :left-bracket :apostrophe :right-bracket)
+       :pressed
        (multiple-value-bind (shot interior) (find-shot (key-index key))
          (if (and shot interior)
              ;; If the key is in the interior of a shot, then perform a split
              (handle-split shot (key-index key))
              (setf (aref *key-pressed* (key-index key)) t))))
-      ((:q :w :e :r :t :y :u :i :o :p) :released
+      ((:q :a :w :s :e :d :r :f :t :g :y :h :u :j :i :k :o :l :p
+           :semicolon :left-bracket :apostrophe :right-bracket)
+       :released
        (setf (aref *key-pressed* (key-index key)) nil))
 
-      (:a :pressed (setf *cannon-turn-left* t))
-      (:a :released (setf *cannon-turn-left* nil))
-      (:d :pressed (setf *cannon-turn-right* t))
-      (:d :released (setf *cannon-turn-right* nil))
+      (:left-shift :pressed (setf *cannon-turn-left* t))
+      (:left-shift :released (setf *cannon-turn-left* nil))
+      (:right-shift :pressed (setf *cannon-turn-right* t))
+      (:right-shift :released (setf *cannon-turn-right* nil))
 
       (:up :pressed (setf *fast-forward* (* *fast-forward* 2)))
       (:up :released (setf *fast-forward* (/ *fast-forward* 2)))
       (:down :pressed (setf *fast-forward* (/ *fast-forward* 2)))
       (:down :released (setf *fast-forward* (* *fast-forward* 2)))
       (:space :pressed
-              ;; Like a reset, for now
-              (setf *shots*
-                    (list (make-shot :pos *cannon-pos*
-                                     :vel (vec2 (* *initial-vel*
-                                                   (- (sin *cannon-rotation*)))
-                                                (* *initial-vel*
-                                                   (cos *cannon-rotation*)))
-                                     :index 0))))))
+              (unless *shot-fired*
+                (setf *shot-fired* t
+                      *shots*
+                      (list (make-shot
+                             :pos *cannon-pos*
+                             :vel (vec2 (* *initial-vel*
+                                           (- (sin *cannon-rotation*)))
+                                        (* *initial-vel*
+                                           (cos *cannon-rotation*)))
+                             :ilo 0
+                             :ihi (- (length *shot-state*) 1))))))))
 
 (defun draw-wall (direction length)
   (draw-line *origin* (mult length direction) *white* :thickness 5.0))
