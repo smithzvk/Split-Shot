@@ -170,14 +170,14 @@ not rounded and the margin doesn't apply to distances past the end of the line."
             (let ((perp (normalize (perp-vec (shot-vel shot)))))
               (cond ((= i (shot-ilo shot))
                      (setf (shot-vel shot)
-                           (add (mult (* 30 dt) perp)
+                           (add (mult (/ (* 18000 dt) (shot-mass shot)) perp)
                                 (shot-vel shot)))
                      (setf (aref *shot-state* (shot-ilo shot))
                            (max 0 (- (aref *shot-state* (shot-ilo shot))
                                      (* 30 dt)))))
                     ((= i (shot-ihi shot))
                      (setf (shot-vel shot)
-                           (add (mult (* -30 dt) perp)
+                           (add (mult (/ (* -18000 dt) (shot-mass shot)) perp)
                                 (shot-vel shot)))
                      (setf (aref *shot-state* (shot-ihi shot))
                            (max 0 (- (aref *shot-state* (shot-ihi shot))
@@ -267,9 +267,9 @@ not rounded and the margin doesn't apply to distances past the end of the line."
 
     ;; Update the velocity given the new shots
     (setf (shot-vel left-shot)
-          (add (mult (/ -4000 (shot-mass left-shot)) perp) (shot-vel shot)))
+          (add (mult (/ -6000 (shot-mass left-shot)) perp) (shot-vel shot)))
     (setf (shot-vel right-shot)
-          (add (mult (/ 4000 (shot-mass right-shot)) perp) (shot-vel shot)))
+          (add (mult (/ 6000 (shot-mass right-shot)) perp) (shot-vel shot)))
     (setf *shots* (concatenate
                    'list
                    (subseq *shots* 0 pos)
