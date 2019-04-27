@@ -4,6 +4,9 @@
 (defvar *width* 800)
 (defvar *height* 600)
 
+(defvar *keys*
+  '(:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0 :p :minus))
+
 (defgame split-shot ()
   ()
   (:viewport-width *width*)
@@ -29,10 +32,10 @@
 (defvar *shot-vel* (vec2 0 30))
 (defvar *shot-fired* nil)
 
-(defvar *shot-state* (make-array 23 :initial-element 100)
+(defvar *shot-state* (make-array 19 :initial-element 100)
   "This holds the global state of all of your shots.")
 
-(defvar *key-pressed* (make-array 23 :initial-element nil)
+(defvar *key-pressed* (make-array 19 :initial-element nil)
   "Holds the current pressed state of the shot controlling keys.")
 
 (defparameter *fast-forward* 1.0)
@@ -121,8 +124,20 @@ not rounded and the margin doesn't apply to distances past the end of the line."
     :walls ())
    (list
     :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
-    :targets (list (vec2 (/ (* 1 *width*) 3) *height*)
-                   (vec2 (/ (* 2 *width*) 3) *height*))
+    :targets (list (vec2 (/ *width* 2) *height*))
+    :walls (list
+            (list (vec2 (* 0.75 *width*) (/ *height* 2))
+                  (vec2 -1 0)
+                  (* 0.5 *width*))))
+   (list
+    :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
+    :targets (list (vec2 (* 0.75 *width*) *height*)
+                   (vec2 (* 0.25 *width*) *height*))
+    :walls ())
+   (list
+    :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
+    :targets (list (vec2 (* 0.75 *width*) 0)
+                   (vec2 (* 0.25 *width*) 0))
     :walls ())))
 
 (defvar *level* nil
@@ -236,30 +251,7 @@ not rounded and the margin doesn't apply to distances past the end of the line."
                   nil))))
 
 (defun key-index (key)
-  (case key
-    (:q 0)
-    (:a 1)
-    (:w 2)
-    (:s 3)
-    (:e 4)
-    (:d 5)
-    (:r 6)
-    (:f 7)
-    (:t 8)
-    (:g 9)
-    (:y 10)
-    (:h 11)
-    (:u 12)
-    (:j 13)
-    (:i 14)
-    (:k 15)
-    (:o 16)
-    (:l 17)
-    (:p 18)
-    (:semicolon 19)
-    (:left-bracket 20)
-    (:apostrophe 21)
-    (:right-bracket 22)))
+  (position key *keys*))
 
 (defun handle-split (shot i)
   (let ((pos (position shot *shots* :test 'eq))
@@ -289,10 +281,10 @@ not rounded and the margin doesn't apply to distances past the end of the line."
 
   (setf *level* level)
 
-  (setf *key-pressed* (make-array (length *key-pressed*)
+  (setf *key-pressed* (make-array (length *keys*)
                                   :initial-element nil))
 
-  (setf *shot-state* (make-array (length *shot-state*)
+  (setf *shot-state* (make-array (length *keys*)
                                  :initial-element 100))
   (setf *shots* nil)
   (setf *shot-fired* nil)
@@ -317,16 +309,14 @@ not rounded and the margin doesn't apply to distances past the end of the line."
   (add-bindings
       (:escape :pressed
         (stop))
-      ((:q :a :w :s :e :d :r :f :t :g :y :h :u :j :i :k :o :l :p
-           :semicolon :left-bracket :apostrophe :right-bracket)
+      ((:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0 :p :minus)
        :pressed
        (multiple-value-bind (shot interior) (find-shot (key-index key))
          (if (and shot interior)
              ;; If the key is in the interior of a shot, then perform a split
              (handle-split shot (key-index key))
              (setf (aref *key-pressed* (key-index key)) t))))
-      ((:q :a :w :s :e :d :r :f :t :g :y :h :u :j :i :k :o :l :p
-           :semicolon :left-bracket :apostrophe :right-bracket)
+      ((:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0 :p :minus)
        :released
        (setf (aref *key-pressed* (key-index key)) nil))
 
