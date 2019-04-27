@@ -6,7 +6,7 @@
 (defvar *height* 600)
 
 (defvar *keys*
-  '(:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0 :p :minus))
+  '(:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0))
 
 (defgame split-shot ()
   ()
@@ -309,14 +309,14 @@ not rounded and the margin doesn't apply to distances past the end of the line."
   (add-bindings
       (:escape :pressed
         (stop))
-      ((:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0 :p :minus)
+      ((:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0)
        :pressed
        (multiple-value-bind (shot interior) (find-shot (key-index key))
          (if (and shot interior)
              ;; If the key is in the interior of a shot, then perform a split
              (handle-split shot (key-index key))
              (setf (aref *key-pressed* (key-index key)) t))))
-      ((:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0 :p :minus)
+      ((:1 :q :2 :w :3 :e :4 :r :5 :t :6 :y :7 :u :8 :i :9 :o :0)
        :released
        (setf (aref *key-pressed* (key-index key)) nil))
 
