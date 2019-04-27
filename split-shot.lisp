@@ -2,6 +2,7 @@
 (in-package :split-shot)
 
 (defvar *width* 800)
+(defvar *arena-height* 500)
 (defvar *height* 600)
 
 (defvar *keys*
@@ -43,8 +44,7 @@
 (defstruct shot pos vel ilo ihi)
 
 (defun shot-mass (shot)
-  (iter (for i :from (shot-ilo shot) :below (length *shot-state*))
-    (while (> (aref *shot-state* i) 0))
+  (iter (for i :from (shot-ilo shot) :to (shot-ihi shot))
     (summing (aref *shot-state* i))))
 
 (defun find-shot (index)
@@ -111,28 +111,28 @@ not rounded and the margin doesn't apply to distances past the end of the line."
      (* rad rad)))
 
 (defparameter *boundary*
-  (list (list (vec2 0 0)              (vec2  0 +1) *height*)
-        (list (vec2 0 *height*)       (vec2 +1  0) *width*)
-        (list (vec2 *width* *height*) (vec2  0 -1) *height*)
-        (list (vec2 *width* 0)        (vec2 -1  0) *width*)))
+  (list (list (vec2 0 0)                    (vec2  0 +1) *arena-height*)
+        (list (vec2 0 *arena-height*)       (vec2 +1  0) *width*)
+        (list (vec2 *width* *arena-height*) (vec2  0 -1) *arena-height*)
+        (list (vec2 *width* 0)              (vec2 -1  0) *width*)))
 
 (defparameter *levels*
   (list
    (list
     :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
-    :targets (list (vec2 (/ *width* 2) *height*))
+    :targets (list (vec2 (/ *width* 2) *arena-height*))
     :walls ())
    (list
     :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
-    :targets (list (vec2 (/ *width* 2) *height*))
+    :targets (list (vec2 (/ *width* 2) *arena-height*))
     :walls (list
-            (list (vec2 (* 0.75 *width*) (/ *height* 2))
+            (list (vec2 (* 0.75 *width*) (/ *arena-height* 2))
                   (vec2 -1 0)
                   (* 0.5 *width*))))
    (list
     :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
-    :targets (list (vec2 (* 0.75 *width*) *height*)
-                   (vec2 (* 0.25 *width*) *height*))
+    :targets (list (vec2 (* 0.75 *width*) *arena-height*)
+                   (vec2 (* 0.25 *width*) *arena-height*))
     :walls ())
    (list
     :cannon (list (vec2 (/ *width* 2) 0) (- (/ pi 2)) (/ pi 2))
@@ -361,8 +361,11 @@ not rounded and the margin doesn't apply to distances past the end of the line."
       (draw-rect (vec2 (/ w -2) 0) w h :fill-paint *white*))))
 
 (defmethod draw ((this split-shot))
+  ;; Clear screen
   (draw-rect *origin*
              *width* *height* :fill-paint *black*)
+
+  ;; Draw arena
   (iter (for shot :in *shots*)
     (with-pushed-canvas ()
       (translate-canvas (x (shot-pos shot))
@@ -386,4 +389,34 @@ not rounded and the margin doesn't apply to distances past the end of the line."
              :in (append *boundary* (getf *level* :walls)))
     (with-pushed-canvas ()
       (translate-canvas (x start) (y start))
-      (draw-wall direction length))))
+      (draw-wall direction length)))
+
+  ;; Draw interface
+  (draw-rect (vec2 0 *arena-height*)
+             *width* (- *height* *arena-height*)
+             :fill-paint *black*)
+  (let ((box-width (/ *width* (length *keys*))))
+    (iter
+      (for key :in *keys*)
+      (for idx :from 0)
+      (with-pushed-canvas ()
+        (translate-canvas (+ 2 (* idx box-width))
+                          *arena-height*)
+        (draw-rect *origin* (- box-width 4) (aref *shot-state* idx)
+                   :fill-paint *black*
+                   :stroke-paint *white*)
+        (unless *shots*
+          (draw-rect *origin* (- box-width 4) (aref *shot-state* idx)
+                     :fill-paint *red*))
+        (draw-text (string-downcase (symbol-name key)) *origin*)))
+    (iter
+      (for shot :in *shots*)
+      (iter
+        (for idx :from (shot-ilo shot) :to (shot-ihi shot))
+        (with-pushed-canvas ()
+          (translate-canvas (+ 2 (* idx box-width))
+                            *arena-height*)
+          (draw-rect *origin* (- box-width 4) (aref *shot-state* idx)
+                     :fill-paint *red*)
+          (draw-text (string-downcase (symbol-name (nth idx *keys*)))
+                     *origin*))))))
