@@ -1,3 +1,22 @@
+- 2019-04-29 06:25
+
+  This is probably the final state of this game.  I threw in a GPLv3 for the
+  license.
+
+  This project languished after I prototyped the core mechanics.  The game is
+  not really fun and there wasn't strong promise that it would become more
+  significantly more fun by applying tweaks.  But I should submit something.
+
+  Late yesterday I added a rewind/fast-forward mechanic so you can retry if you
+  screw up.  It makes for a much less annoying game, but also a much easier
+  one.  To stop time, you press the space bar.  To rewind press and hold left.
+  To more forward again, press and hold right.
+
+  The time reverse was surprisingly simple to do, but I guess that is only
+  because I was careful to keep all of the game state in just a couple objects.
+
+  Aiming the cannon has been remapped to left and right as well.
+
 - 2019-04-20 21:17
 
   Moved the journal over to the readme file as this will make it display by
