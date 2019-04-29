@@ -33,6 +33,17 @@
 (defvar *shot-vel* (vec2 0 30))
 (defvar *shot-fired* nil)
 
+
+(defvar *paused* nil
+  "Indicates when we are in a paused state.  In the paused state you can rewind
+  the game state.")
+(defvar *history* nil
+  "This holds the history of the game state for the given level.  This allows
+  for rewinding the game state.")
+(defvar *future* nil
+  "This holds the saved future of the game state for the given level.  This allows
+  for moving forward in the game state history.")
+
 (defvar *shot-state* (make-array 19 :initial-element 100)
   "This holds the global state of all of your shots.")
 
@@ -158,81 +169,102 @@ not rounded and the margin doesn't apply to distances past the end of the line."
          (dt (* (- new-time *last-time*)
                 *fast-forward*))
          (removal-list ()))
+    (cond
+      (*paused*
+       (when (and *cannon-turn-left* *history*)
+         (let ((state (pop *history*)))
+           (push state *future*)
+           (destructuring-bind (shots shot-state) state
+             (setf *shots* shots)
+             (setf *shot-state* shot-state))))
+       (when (and *cannon-turn-right* *future*)
+         (let ((state (pop *future*)))
+           (push state *history*)
+           (destructuring-bind (shots shot-state) state
+             (setf *shots* shots)
+             (setf *shot-state* shot-state)))))
+      (t
 
-    (when *cannon-turn-left* (incf *cannon-rotation* 0.1))
-    (when *cannon-turn-right* (decf *cannon-rotation* 0.1))
+       ;; First save the current state and clear the future
+       (when *shots*
+         (push (list (mapcar #'copy-shot *shots*) (copy-seq *shot-state*))
+               *history*)
+         (setf *future* nil))
 
-    ;; Steering of shots
-    (iter (for key :in-vector *key-pressed* :with-index i)
-      (when key
-        (multiple-value-bind (shot interior) (find-shot i)
-          (when (and shot (not interior))
-            (let ((perp (normalize (perp-vec (shot-vel shot)))))
-              (cond ((= i (shot-ilo shot))
-                     (setf (shot-vel shot)
-                           (add (mult (/ (* 18000 dt) (shot-mass shot)) perp)
-                                (shot-vel shot)))
-                     (setf (aref *shot-state* (shot-ilo shot))
-                           (max 0 (- (aref *shot-state* (shot-ilo shot))
-                                     (* 30 dt)))))
-                    ((= i (shot-ihi shot))
-                     (setf (shot-vel shot)
-                           (add (mult (/ (* -18000 dt) (shot-mass shot)) perp)
-                                (shot-vel shot)))
-                     (setf (aref *shot-state* (shot-ihi shot))
-                           (max 0 (- (aref *shot-state* (shot-ihi shot))
-                                     (* 30 dt)))))))
-            (when (= 0 (aref *shot-state* (shot-ilo shot)))
-              (incf (shot-ilo shot)))
-            (when (= 0 (aref *shot-state* (shot-ihi shot)))
-              (decf (shot-ihi shot)))
-            (when (< (shot-ihi shot) (shot-ilo shot))
-              (push shot removal-list))))))
+       (when *cannon-turn-left* (incf *cannon-rotation* 0.1))
+       (when *cannon-turn-right* (decf *cannon-rotation* 0.1))
 
-    ;; Handle shot motion
-    (iter (for shot :in *shots*)
+       ;; Steering of shots
+       (iter (for key :in-vector *key-pressed* :with-index i)
+             (when key
+               (multiple-value-bind (shot interior) (find-shot i)
+                 (when (and shot (not interior))
+                   (let ((perp (normalize (perp-vec (shot-vel shot)))))
+                     (cond ((= i (shot-ilo shot))
+                            (setf (shot-vel shot)
+                                  (add (mult (/ (* 18000 dt) (shot-mass shot)) perp)
+                                       (shot-vel shot)))
+                            (setf (aref *shot-state* (shot-ilo shot))
+                                  (max 0 (- (aref *shot-state* (shot-ilo shot))
+                                            (* 30 dt)))))
+                           ((= i (shot-ihi shot))
+                            (setf (shot-vel shot)
+                                  (add (mult (/ (* -18000 dt) (shot-mass shot)) perp)
+                                       (shot-vel shot)))
+                            (setf (aref *shot-state* (shot-ihi shot))
+                                  (max 0 (- (aref *shot-state* (shot-ihi shot))
+                                            (* 30 dt)))))))
+                   (when (= 0 (aref *shot-state* (shot-ilo shot)))
+                     (incf (shot-ilo shot)))
+                   (when (= 0 (aref *shot-state* (shot-ihi shot)))
+                     (decf (shot-ihi shot)))
+                   (when (< (shot-ihi shot) (shot-ilo shot))
+                     (push shot removal-list))))))
 
-      ;; Integrate motion
-      (setf (shot-pos shot) (add (shot-pos shot) (mult dt (shot-vel shot))))
+       ;; Handle shot motion
+       (iter (for shot :in *shots*)
 
-      ;; Detect collisions
-      (when (or
-             ;; Detect out of bounds
-             (iter (for wall :in *boundary*)
-               (for collision := (line-collision (shot-pos shot) wall 500))
-               (finding wall :such-that (and collision (< collision 0))))
-             ;; Detect collisions with walls
-             (iter (for wall :in (getf *level* :walls))
-               (for collision := (line-collision (shot-pos shot) wall 5))
-               (finding wall :such-that collision)))
-        (push shot removal-list)))
+             ;; Integrate motion
+             (setf (shot-pos shot) (add (shot-pos shot) (mult dt (shot-vel shot))))
 
-    (iter (for shot :in removal-list)
-      (setf *shots* (remove shot *shots*))
+             ;; Detect collisions
+             (when (or
+                    ;; Detect out of bounds
+                    (iter (for wall :in *boundary*)
+                          (for collision := (line-collision (shot-pos shot) wall 500))
+                          (finding wall :such-that (and collision (< collision 0))))
+                    ;; Detect collisions with walls
+                    (iter (for wall :in (getf *level* :walls))
+                          (for collision := (line-collision (shot-pos shot) wall 5))
+                          (finding wall :such-that collision)))
+               (push shot removal-list)))
 
-      (iter (for i :from (shot-ilo shot) :below (length *shot-state*))
-        (if (= 0 (aref *shot-state* i))
-            (finish)
-            (setf (aref *shot-state* i) 0)))
+       (iter (for shot :in removal-list)
+             (setf *shots* (remove shot *shots*))
 
-      (let ((hit-targets ()))
-        (iter (for target :in *live-targets*)
-          (when (target-collision (shot-pos shot) target 10)
-            (push target hit-targets)))
-        (iter (for target :in hit-targets)
-          (push target *hit-targets*)
-          (setf *live-targets* (remove target *live-targets*)))))
+             (iter (for i :from (shot-ilo shot) :below (length *shot-state*))
+                   (if (= 0 (aref *shot-state* i))
+                       (finish)
+                       (setf (aref *shot-state* i) 0)))
 
-    (unless (iter (for val :in-vector *shot-state*)
-              (thereis (> val 0)))
-      (cond (*live-targets*
-             (format t "~%Try again!")
-             (init-level (nth (mod *level-number* (length *levels*))
-                              *levels*)))
-            (t (format t "~%Level Complete!")
-               (incf *level-number*)
-               (init-level (nth (mod *level-number* (length *levels*))
-                                *levels*)))))
+             (let ((hit-targets ()))
+               (iter (for target :in *live-targets*)
+                     (when (target-collision (shot-pos shot) target 10)
+                       (push target hit-targets)))
+               (iter (for target :in hit-targets)
+                     (push target *hit-targets*)
+                     (setf *live-targets* (remove target *live-targets*)))))
+
+       (unless (iter (for val :in-vector *shot-state*)
+                     (thereis (> val 0)))
+         (cond (*live-targets*
+                (format t "~%Try again!")
+                (init-level (nth (mod *level-number* (length *levels*))
+                                 *levels*)))
+               (t (format t "~%Level Complete!")
+                  (incf *level-number*)
+                  (init-level (nth (mod *level-number* (length *levels*))
+                                   *levels*)))))))
 
     (setf *last-time* new-time)))
 
@@ -288,6 +320,9 @@ not rounded and the margin doesn't apply to distances past the end of the line."
                                  :initial-element 100))
   (setf *shots* nil)
   (setf *shot-fired* nil)
+  (setf *paused* nil)
+  (setf *history* nil)
+  (setf *future* nil)
 
   (setf *live-targets* (getf *level* :targets))
   (setf *hit-targets* ())
@@ -320,27 +355,28 @@ not rounded and the margin doesn't apply to distances past the end of the line."
        :released
        (setf (aref *key-pressed* (key-index key)) nil))
 
-      (:left-shift :pressed (setf *cannon-turn-left* t))
-      (:left-shift :released (setf *cannon-turn-left* nil))
-      (:right-shift :pressed (setf *cannon-turn-right* t))
-      (:right-shift :released (setf *cannon-turn-right* nil))
+      (:left :pressed (setf *cannon-turn-left* t))
+      (:left :released (setf *cannon-turn-left* nil))
+      (:right :pressed (setf *cannon-turn-right* t))
+      (:right :released (setf *cannon-turn-right* nil))
 
       (:up :pressed (setf *fast-forward* (* *fast-forward* 2)))
       (:up :released (setf *fast-forward* (/ *fast-forward* 2)))
       (:down :pressed (setf *fast-forward* (/ *fast-forward* 2)))
       (:down :released (setf *fast-forward* (* *fast-forward* 2)))
       (:space :pressed
-              (unless *shot-fired*
-                (setf *shot-fired* t
-                      *shots*
-                      (list (make-shot
-                             :pos *cannon-pos*
-                             :vel (vec2 (* *initial-vel*
-                                           (- (sin *cannon-rotation*)))
-                                        (* *initial-vel*
-                                           (cos *cannon-rotation*)))
-                             :ilo 0
-                             :ihi (- (length *shot-state*) 1))))))))
+              (cond ((not *shot-fired*)
+                     (setf *shot-fired* t
+                           *shots*
+                           (list (make-shot
+                                  :pos *cannon-pos*
+                                  :vel (vec2 (* *initial-vel*
+                                                (- (sin *cannon-rotation*)))
+                                             (* *initial-vel*
+                                                (cos *cannon-rotation*)))
+                                  :ilo 0
+                                  :ihi (- (length *shot-state*) 1)))))
+                    (t (setf *paused* (not *paused*)))))))
 
 (defun draw-wall (direction length)
   (draw-line *origin* (mult length direction) *white* :thickness 5.0))
